@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Splitter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f2ec;
+    --surface: #faf8f4;
+    --surface2: #fff;
+    --ink: #1a1714;
+    --ink2: #6b6560;
+    --ink3: #9e9690;
+    --accent: #c85a2a;
+    --accent-light: #f5ece6;
+    --accent2: #2a6bc8;
+    --accent2-light: #e6eef5;
+    --border: #ddd8d0;
+    --border2: #e8e4dc;
+    --success: #2a8c5a;
+    --success-light: #e6f5ee;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 2rem 1rem 4rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  header h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 300;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+
+  header h1 span {
+    color: var(--accent);
+  }
+
+  header p {
+    font-size: 0.8rem;
+    color: var(--ink3);
+    margin-top: 0.5rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .container { max-width: 760px; margin: 0 auto; }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+
+  .dropzone:hover, .dropzone.over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .dropzone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .dropzone-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  .dropzone h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 1.3rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .dropzone p { font-size: 0.78rem; color: var(--ink3); }
+
+  /* PDF info bar */
+  .pdf-info {
+    display: none;
+    align-items: center;
+    gap: 1rem;
+    background: var(--success-light);
+    border: 1px solid #b8deca;
+    border-radius: var(--radius);
+    padding: 0.9rem 1.2rem;
+    margin-top: 1rem;
+    font-size: 0.82rem;
+  }
+
+  .pdf-info.show { display: flex; }
+
+  .pdf-info .file-name {
+    font-weight: 500;
+    color: var(--success);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pdf-info .page-count {
+    color: var(--ink2);
+    white-space: nowrap;
+  }
+
+  .btn-reset {
+    background: none;
+    border: 1px solid #b8deca;
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    font-family: 'DM Mono', monospace;
+    cursor: pointer;
+    color: var(--success);
+    transition: background 0.15s;
+  }
+
+  .btn-reset:hover { background: rgba(42,140,90,0.1); }
+
+  /* Ranges section */
+  .section {
+    margin-top: 1.75rem;
+    display: none;
+  }
+
+  .section.show { display: block; }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .section-header h3 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 1.15rem;
+  }
+
+  .section-header span {
+    font-size: 0.75rem;
+    color: var(--ink3);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* Range cards */
+  .ranges-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+  .range-card {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 1rem 1.2rem;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    transition: border-color 0.15s;
+  }
+
+  .range-card:hover { border-color: var(--border); }
+
+  .range-num {
+    font-size: 0.72rem;
+    color: var(--ink3);
+    width: 1.5rem;
+    text-align: right;
+    letter-spacing: 0.04em;
+    user-select: none;
+  }
+
+  .range-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr 2fr;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 0.3rem; }
+
+  .field-group label {
+    font-size: 0.68rem;
+    color: var(--ink3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .field-group input[type="number"],
+  .field-group input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 0.45rem 0.65rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--ink);
+    width: 100%;
+    transition: border-color 0.15s;
+    -moz-appearance: textfield;
+  }
+
+  .field-group input::-webkit-inner-spin-button,
+  .field-group input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .field-group input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface2);
+  }
+
+  .field-group input.error { border-color: #e24b4a; background: #fdf3f3; }
+
+  .range-actions { display: flex; gap: 0.4rem; }
+
+  .btn-icon {
+    background: none;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.15s, border-color 0.15s;
+    color: var(--ink2);
+  }
+
+  .btn-icon:hover {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--ink);
+  }
+
+  .btn-icon.danger:hover { background: #fdf3f3; border-color: #e24b4a; color: #e24b4a; }
+
+  /* Add range button */
+  .btn-add {
+    width: 100%;
+    padding: 0.8rem;
+    background: none;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--ink3);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    letter-spacing: 0.04em;
+    margin-top: 0.5rem;
+  }
+
+  .btn-add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  /* Preview thumbnails */
+  .preview-strip {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 0.75rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .thumb-wrap {
+    flex: 0 0 auto;
+    width: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .thumb-canvas {
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    width: 70px;
+    height: 90px;
+    object-fit: cover;
+    background: white;
+    display: block;
+  }
+
+  .thumb-num {
+    font-size: 0.65rem;
+    color: var(--ink3);
+    text-align: center;
+  }
+
+  /* Export section */
+  .export-section {
+    margin-top: 1.75rem;
+    display: none;
+  }
+
+  .export-section.show { display: block; }
+
+  .export-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.2rem;
+  }
+
+  .export-card {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .export-card .name-label {
+    font-size: 0.68rem;
+    color: var(--ink3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .export-card .name-val {
+    font-size: 0.85rem;
+    color: var(--ink);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .export-card .pages-val {
+    font-size: 0.75rem;
+    color: var(--ink3);
+  }
+
+  /* Main CTA */
+  .btn-export-all {
+    width: 100%;
+    padding: 1rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: background 0.15s, transform 0.1s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-export-all:hover { background: #b04e24; }
+  .btn-export-all:active { transform: scale(0.99); }
+  .btn-export-all:disabled { background: var(--ink3); cursor: not-allowed; transform: none; }
+
+  .btn-export-single {
+    background: var(--accent2-light);
+    border: 1px solid #b8ceea;
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.75rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.73rem;
+    color: var(--accent2);
+    cursor: pointer;
+    transition: background 0.15s;
+    align-self: flex-start;
+  }
+
+  .btn-export-single:hover { background: #d4e3f5; }
+
+  /* Error message */
+  .error-msg {
+    font-size: 0.75rem;
+    color: #e24b4a;
+    margin-top: 0.4rem;
+    display: none;
+  }
+
+  .error-msg.show { display: block; }
+
+  /* Separator line */
+  .sep {
+    border: none;
+    border-top: 1px solid var(--border2);
+    margin: 1.75rem 0;
+  }
+
+  /* Progress */
+  .progress-bar {
+    height: 3px;
+    background: var(--border2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.8rem;
+    display: none;
+  }
+
+  .progress-bar.show { display: block; }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.2s;
+  }
+
+  .status-msg {
+    font-size: 0.75rem;
+    color: var(--ink3);
+    text-align: center;
+    margin-top: 0.5rem;
+    min-height: 1rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>PDF <span>Splitter</span></h1>
+    <p>Découpe ton PDF en segments · renomme · exporte</p>
+  </header>
+
+  <!-- Drop zone -->
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept=".pdf">
+    <span class="dropzone-icon">📄</span>
+    <h2>Dépose ton PDF ici</h2>
+    <p>ou clique pour choisir un fichier</p>
+  </div>
+
+  <div class="pdf-info" id="pdfInfo">
+    <span class="file-name" id="fileName"></span>
+    <span class="page-count" id="pageCount"></span>
+    <button class="btn-reset" id="btnReset">✕ Réinitialiser</button>
+  </div>
+
+  <!-- Preview -->
+  <div class="section" id="previewSection">
+    <div class="section-header">
+      <h3>Aperçu des pages</h3>
+    </div>
+    <div class="preview-strip" id="previewStrip"></div>
+  </div>
+
+  <hr class="sep" id="sep1" style="display:none">
+
+  <!-- Ranges -->
+  <div class="section" id="rangesSection">
+    <div class="section-header">
+      <h3>Définir les segments</h3>
+      <span id="rangeCount">0 segment(s)</span>
+    </div>
+    <div class="ranges-list" id="rangesList"></div>
+    <button class="btn-add" id="btnAddRange">+ Ajouter un segment</button>
+    <div class="error-msg" id="globalError"></div>
+  </div>
+
+  <!-- Export -->
+  <div class="export-section" id="exportSection">
+    <hr class="sep">
+    <div class="section-header">
+      <h3>Résumé des exports</h3>
+    </div>
+    <div class="export-grid" id="exportGrid"></div>
+    <button class="btn-export-all" id="btnExportAll">⬇ Tout télécharger</button>
+    <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+    <p class="status-msg" id="statusMsg"></p>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let pdfBytes = null;
+let totalPages = 0;
+let pdfDoc = null;
+let ranges = [];
+let rangeIdCounter = 0;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const pdfInfo = document.getElementById('pdfInfo');
+const fileName = document.getElementById('fileName');
+const pageCount = document.getElementById('pageCount');
+const btnReset = document.getElementById('btnReset');
+const previewSection = document.getElementById('previewSection');
+const previewStrip = document.getElementById('previewStrip');
+const rangesSection = document.getElementById('rangesSection');
+const rangesList = document.getElementById('rangesList');
+const btnAddRange = document.getElementById('btnAddRange');
+const exportSection = document.getElementById('exportSection');
+const exportGrid = document.getElementById('exportGrid');
+const btnExportAll = document.getElementById('btnExportAll');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+const statusMsg = document.getElementById('statusMsg');
+const rangeCount = document.getElementById('rangeCount');
+const globalError = document.getElementById('globalError');
+const sep1 = document.getElementById('sep1');
+
+// Drag & drop
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') loadPDF(file);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadPDF(e.target.files[0]); });
+btnReset.addEventListener('click', resetAll);
+
+async function loadPDF(file) {
+  pdfBytes = await file.arrayBuffer();
+  const typedArr = new Uint8Array(pdfBytes);
+
+  // pdf.js for preview
+  pdfDoc = await pdfjsLib.getDocument({ data: typedArr }).promise;
+  totalPages = pdfDoc.numPages;
+
+  fileName.textContent = file.name;
+  pageCount.textContent = `${totalPages} page(s)`;
+  pdfInfo.classList.add('show');
+
+  previewSection.classList.add('show');
+  sep1.style.display = '';
+  rangesSection.classList.add('show');
+
+  await renderThumbs();
+  addRange();
+}
+
+async function renderThumbs() {
+  previewStrip.innerHTML = '';
+  for (let i = 1; i <= Math.min(totalPages, 40); i++) {
+    const page = await pdfDoc.getPage(i);
+    const vp = page.getViewport({ scale: 0.4 });
+    const canvas = document.createElement('canvas');
+    canvas.className = 'thumb-canvas';
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'thumb-wrap';
+    const lbl = document.createElement('div');
+    lbl.className = 'thumb-num';
+    lbl.textContent = i;
+    wrap.appendChild(canvas);
+    wrap.appendChild(lbl);
+    previewStrip.appendChild(wrap);
+  }
+  if (totalPages > 40) {
+    const more = document.createElement('div');
+    more.className = 'thumb-wrap';
+    more.style.justifyContent = 'center';
+    more.innerHTML = `<div class="thumb-num" style="font-size:0.7rem; color:var(--ink3); padding-top:2rem;">+${totalPages-40} pages</div>`;
+    previewStrip.appendChild(more);
+  }
+}
+
+function addRange(startVal, endVal) {
+  const id = ++rangeIdCounter;
+  const lastRange = ranges[ranges.length - 1];
+  const defaultStart = lastRange ? lastRange.end + 1 : 1;
+  const defaultEnd = totalPages;
+
+  ranges.push({ id, start: startVal || defaultStart, end: endVal || defaultEnd, name: `partie-${ranges.length + 1}` });
+  renderRanges();
+  updateExportPreview();
+}
+
+function removeRange(id) {
+  ranges = ranges.filter(r => r.id !== id);
+  updateExportPreview();
+  renderRanges();
+}
+
+function renderRanges() {
+  rangesList.innerHTML = '';
+  rangeCount.textContent = `${ranges.length} segment(s)`;
+
+  ranges.forEach((r, idx) => {
+    const card = document.createElement('div');
+    card.className = 'range-card';
+    card.innerHTML = `
+      <span class="range-num">${String(idx + 1).padStart(2, '0')}</span>
+      <div class="range-fields">
+        <div class="field-group">
+          <label>De (page)</label>
+          <input type="number" min="1" max="${totalPages}" value="${r.start}" data-id="${r.id}" data-field="start">
+        </div>
+        <div class="field-group">
+          <label>À (page)</label>
+          <input type="number" min="1" max="${totalPages}" value="${r.end}" data-id="${r.id}" data-field="end">
+        </div>
+        <div class="field-group">
+          <label>Nom du fichier</label>
+          <input type="text" value="${r.name}" placeholder="nom-du-pdf" data-id="${r.id}" data-field="name">
+        </div>
+      </div>
+      <div class="range-actions">
+        <button class="btn-icon danger" title="Supprimer" data-remove="${r.id}">✕</button>
+      </div>
+    `;
+    rangesList.appendChild(card);
+  });
+
+  // Events
+  rangesList.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const id = +inp.dataset.id;
+      const field = inp.dataset.field;
+      const r = ranges.find(x => x.id === id);
+      if (!r) return;
+      r[field] = field !== 'name' ? parseInt(inp.value) || 1 : inp.value;
+      validateRange(r, inp);
+      updateExportPreview();
+    });
+  });
+
+  rangesList.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => removeRange(+btn.dataset.remove));
+  });
+}
+
+function validateRange(r, el) {
+  const inputs = rangesList.querySelectorAll(`[data-id="${r.id}"]`);
+  let ok = true;
+  if (r.start < 1 || r.start > totalPages || isNaN(r.start)) ok = false;
+  if (r.end < r.start || r.end > totalPages || isNaN(r.end)) ok = false;
+
+  inputs.forEach(i => {
+    if (i.dataset.field !== 'name') {
+      i.classList.toggle('error', !ok);
+    }
+  });
+  return ok;
+}
+
+function validateAll() {
+  let valid = true;
+  let msg = '';
+  ranges.forEach(r => {
+    if (isNaN(r.start) || r.start < 1 || r.start > totalPages) { valid = false; msg = `Segment "${r.name}" : page de début invalide.`; }
+    if (isNaN(r.end) || r.end < r.start || r.end > totalPages) { valid = false; msg = `Segment "${r.name}" : page de fin invalide.`; }
+    if (!r.name.trim()) { valid = false; msg = `Un segment n'a pas de nom.`; }
+  });
+  globalError.textContent = msg;
+  globalError.classList.toggle('show', !valid);
+  return valid;
+}
+
+function updateExportPreview() {
+  if (ranges.length === 0) {
+    exportSection.classList.remove('show');
+    return;
+  }
+  exportSection.classList.add('show');
+  exportGrid.innerHTML = '';
+
+  ranges.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'export-card';
+    const pages = (isNaN(r.start) || isNaN(r.end)) ? '?' : Math.max(0, r.end - r.start + 1);
+    card.innerHTML = `
+      <div class="name-label">Fichier</div>
+      <div class="name-val">${r.name || '(sans nom)'}.pdf</div>
+      <div class="pages-val">Pages ${r.start}–${r.end} · ${pages} page(s)</div>
+      <button class="btn-export-single" data-id="${r.id}">⬇ Ce fichier</button>
+    `;
+    exportGrid.appendChild(card);
+  });
+
+  exportGrid.querySelectorAll('[data-id]').forEach(btn => {
+    btn.addEventListener('click', () => exportSingle(+btn.dataset.id));
+  });
+}
+
+async function splitRange(r) {
+  const { PDFDocument } = PDFLib;
+  const srcDoc = await PDFDocument.load(pdfBytes);
+  const newDoc = await PDFDocument.create();
+  const pageIdxs = [];
+  for (let p = r.start; p <= r.end; p++) pageIdxs.push(p - 1);
+  const copied = await newDoc.copyPages(srcDoc, pageIdxs);
+  copied.forEach(p => newDoc.addPage(p));
+  return await newDoc.save();
+}
+
+async function exportSingle(id) {
+  if (!validateAll()) return;
+  const r = ranges.find(x => x.id === id);
+  if (!r) return;
+  const bytes = await splitRange(r);
+  download(bytes, (r.name.trim() || 'segment') + '.pdf');
+}
+
+btnExportAll.addEventListener('click', async () => {
+  if (!validateAll()) return;
+  btnExportAll.disabled = true;
+  progressBar.classList.add('show');
+
+  for (let i = 0; i < ranges.length; i++) {
+    const r = ranges[i];
+    statusMsg.textContent = `Export ${i + 1}/${ranges.length} : ${r.name}.pdf…`;
+    progressFill.style.width = `${((i) / ranges.length) * 100}%`;
+    const bytes = await splitRange(r);
+    download(bytes, (r.name.trim() || `segment-${i+1}`) + '.pdf');
+    await new Promise(res => setTimeout(res, 200));
+  }
+
+  progressFill.style.width = '100%';
+  statusMsg.textContent = `✓ ${ranges.length} fichier(s) exporté(s)`;
+  btnExportAll.disabled = false;
+  setTimeout(() => {
+    progressBar.classList.remove('show');
+    statusMsg.textContent = '';
+    progressFill.style.width = '0%';
+  }, 3000);
+});
+
+btnAddRange.addEventListener('click', () => addRange());
+
+function download(bytes, name) {
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function resetAll() {
+  pdfBytes = null; totalPages = 0; pdfDoc = null; ranges = []; rangeIdCounter = 0;
+  fileInput.value = '';
+  pdfInfo.classList.remove('show');
+  previewSection.classList.remove('show');
+  sep1.style.display = 'none';
+  rangesSection.classList.remove('show');
+  exportSection.classList.remove('show');
+  previewStrip.innerHTML = '';
+  rangesList.innerHTML = '';
+  exportGrid.innerHTML = '';
+  globalError.classList.remove('show');
+}
+</script>
+</body>
+</html>
